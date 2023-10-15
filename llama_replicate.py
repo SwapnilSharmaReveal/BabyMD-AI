@@ -11,6 +11,9 @@ st.markdown(
     [data-testid="collapsedControl"] {
         display: none
     }
+    [data-testid="manage-app-button"] {
+        display: none
+    }
 </style>
 """,
     unsafe_allow_html=True,
