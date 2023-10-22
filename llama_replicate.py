@@ -54,6 +54,22 @@ hide_streamlit_style = """
             """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True) 
 
+# Display "Print Action Button" in all environment other than production
+environment = os.environ['APPLICATION_ENV']
+show_print_btn_css = """
+<style>
+    #MainMenu {visibility: visible;}
+    [data-testid="main-menu-popover"] [data-testid="main-menu-list"] ul:not(:nth-of-type(3)) , [data-testid="main-menu-popover"] [data-testid="main-menu-divider"]{
+        display: none;
+    }
+    [data-testid="main-menu-popover"] [data-testid="main-menu-list"]:nth-of-type(2){
+        display: none;
+    }
+</style>
+"""
+if environment != 'Production':
+    st.markdown(show_print_btn_css, unsafe_allow_html=True)
+
 # Store LLM generated responses
 if "messages" not in st.session_state.keys():
     st.session_state.messages = [{"role": "assistant", "content": "Hi! I'm your health assistant. How can I help you today?"}]
