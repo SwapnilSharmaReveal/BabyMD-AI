@@ -54,8 +54,7 @@ hide_streamlit_style = """
             """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True) 
 
-# Display "Print Action Button" in all environment other than production
-environment = os.environ['APPLICATION_ENV']
+# Display "Print Action Button" in all environment.
 show_print_btn_css = """
 <style>
     #MainMenu {visibility: visible;}
@@ -67,8 +66,7 @@ show_print_btn_css = """
     }
 </style>
 """
-if environment != 'Production':
-    st.markdown(show_print_btn_css, unsafe_allow_html=True)
+st.markdown(show_print_btn_css, unsafe_allow_html=True)
 
 # Store LLM generated responses
 if "messages" not in st.session_state.keys():
