@@ -1,7 +1,13 @@
 import streamlit as st
 import replicate
+from langchain.llms import Replicate
 import os
-
+from langchain.chains import LLMChain
+from langchain.llms import CTransformers
+from llamaapi import LlamaAPI
+from langchain.memory import ConversationBufferWindowMemory
+from langchain.chains import SimpleSequentialChain
+from langchain.prompts import PromptTemplate
 # App title
 st.set_page_config(page_title="BabyMD AI Assistant", initial_sidebar_state="collapsed")
 
@@ -22,6 +28,7 @@ st.markdown(
 # Replicate Credentials
 st.title('👨🏼‍⚕️ BabyMD AI Assistant')
 replicate_api = os.environ['REPLICATE_API_TOKEN']
+# replicate_api = os.environ.get("REPLICATE_API_TOKEN")
 # with st.sidebar:
 
 #     # st.subheader('Models and parameters')
@@ -40,7 +47,10 @@ replicate_api = os.environ['REPLICATE_API_TOKEN']
 #     top_p = 0.9
 #     max_length = 4096
 
-llm = 'a16z-infra/llama13b-v2-chat:df7690f1994d94e96ad9d568eac121aecf50684a0b0963b25a41cc40061269e5'
+# llm = dict('a16z-infra/llama13b-v2-chat:df7690f1994d94e96ad9d568eac121aecf50684a0b0963b25a41cc40061269e5')
+# llm_info = {'name': 'a16z-infra/llama13b-v2-chat', 'version': 'df7690f1994d94e96ad9d568eac121aecf50684a0b0963b25a41cc40061269e5'}
+# llm = LlamaAPI('a16z-infra/llama13b-v2-chat:df7690f1994d94e96ad9d568eac121aecf50684a0b0963b25a41cc40061269e5')
+
 temperature = 0.1
 top_p = 0.9
 max_length = 4096
@@ -54,23 +64,9 @@ hide_streamlit_style = """
             """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True) 
 
-# Display "Print Action Button" in all environment.
-show_print_btn_css = """
-<style>
-    #MainMenu {visibility: visible;}
-    [data-testid="main-menu-popover"] [data-testid="main-menu-list"] ul:not(:nth-of-type(3)) , [data-testid="main-menu-popover"] [data-testid="main-menu-divider"]{
-        display: none;
-    }
-    [data-testid="main-menu-popover"] [data-testid="main-menu-list"]:nth-of-type(2){
-        display: none;
-    }
-</style>
-"""
-st.markdown(show_print_btn_css, unsafe_allow_html=True)
-
 # Store LLM generated responses
 if "messages" not in st.session_state.keys():
-    st.session_state.messages = [{"role": "assistant", "content": "Hi! I'm your health assistant. How can I help you today?"}]
+    st.session_state.messages = [{"role": "assistant", "content": "How may I assist you today?"}]
 
 # Display or clear chat messages
 for message in st.session_state.messages:
@@ -78,12 +74,12 @@ for message in st.session_state.messages:
         st.write(message["content"])
 
 def clear_chat_history():
-    st.session_state.messages = [{"role": "assistant", "content": "Hi! I'm your health assistant. How can I help you today?"}]
+    st.session_state.messages = [{"role": "assistant", "content": "How may I assist you today?"}]
 st.sidebar.button('Clear Chat History', on_click=clear_chat_history)
 
 # Function for generating LLaMA2 response. Refactored from https://github.com/a16z-infra/llama2-chatbot
 def generate_llama2_response(prompt_input):
-    string_dialogue = "<s>\
+    prompt_template ="""<s>\
         [SYS]You are a assistant to BBMD pedtrician who needs to collect symptoms of the user and who doesnt provide any diagnosis or disease name. You do not respond as 'User' or pretend to be 'User'. You only respond once as 'Assistant'.[/SYS]\
         [INT]Remember you are a symptoms collector[/INT]\
         [INT]Do not provide any diagnosis or disease name at the end of the conversation[/INT]\
@@ -100,16 +96,56 @@ def generate_llama2_response(prompt_input):
         [/INT]\
         [INT]Replace all the diagnosis name with 'some medical conditions'[/INT]\
         [INT]Do not answer any other questions other than collecting symptoms about the health problem[/INT]\
-    "
+        [INT]{input} this is the question to which you need to answer by following all the above instructions[/INT]\
+        """
+    prompt_template = PromptTemplate(input_variables=["input"],template=prompt_template)
+    # first_chain: LLMChain = LLMChain(llm=model, prompt=first_prompt_template)
+    # print("firstone",prompt_template)
+    
+    validate_template = """<s>\
+        [INT]'thanks for the reply':{response}[/INT]\
+        """
+    validate_template = PromptTemplate(input_variables=["response"],template=validate_template)
+    # print("replacing",validate_template)
+    
+    
+    print("aaaaa",st.session_state.messages)
+    print("zzzz",prompt_input)
     for dict_message in st.session_state.messages:
+        print("bbbb",dict_message)
         if dict_message["role"] == "user":
-            string_dialogue += "User: " + dict_message["content"] + "\n\n"
+            prompt_template += "User: " + dict_message["content"] + "\n\n"
+            print("ccccc",prompt_template)
         else:
-            string_dialogue += "Assistant: " + dict_message["content"] + "\n\n"
-    output = replicate.run('a16z-infra/llama13b-v2-chat:df7690f1994d94e96ad9d568eac121aecf50684a0b0963b25a41cc40061269e5', 
-                           input={"prompt": f"{string_dialogue} {prompt_input} Assistant: ",
-                                  "temperature":temperature, "top_p":top_p, "max_length":max_length, "repetition_penalty":1})
-    return output
+            prompt_template += "Assistant: " + dict_message["content"] + "\n\n"
+            print("ddddd",prompt_template)
+    # output = replicate.run('a16z-infra/llama13b-v2-chat:df7690f1994d94e96ad9d568eac121aecf50684a0b0963b25a41cc40061269e5', 
+    #                        input={"prompt": f"{string_dialogue} {prompt_input} Assistant: ",
+    #                               "temperature":temperature, "top_p":top_p, "max_length":max_length, "repetition_penalty":1})
+    # print("sasas",output)
+    # return output
+    first_chain: LLMChain =  LLMChain(
+    llm = Replicate(model="a16z-infra/llama13b-v2-chat:df7690f1994d94e96ad9d568eac121aecf50684a0b0963b25a41cc40061269e5"), 
+    prompt=prompt_template,
+    memory=ConversationBufferWindowMemory(k=2),
+    llm_kwargs={"max_length": 4096}
+)
+    # print("first1",first_chain)
+    
+    second_chain: LLMChain =  LLMChain(
+    llm = Replicate(model="a16z-infra/llama13b-v2-chat:df7690f1994d94e96ad9d568eac121aecf50684a0b0963b25a41cc40061269e5"), 
+    prompt=validate_template,
+    memory=ConversationBufferWindowMemory(k=2),
+    llm_kwargs={"max_length": 4096}
+)
+    # print("second",second_chain)
+    
+    ss_chain = SimpleSequentialChain(
+    chains=[first_chain,second_chain])
+    review = ss_chain.run(prompt_input)
+    
+    print("review",review)
+    return review
 
 # User-provided prompt
 if prompt := st.chat_input(disabled=not replicate_api):
@@ -122,6 +158,7 @@ if st.session_state.messages[-1]["role"] != "assistant":
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
             response = generate_llama2_response(prompt)
+            # print("gfds",response)
             placeholder = st.empty()
             full_response = ''
             for item in response:
@@ -129,4 +166,5 @@ if st.session_state.messages[-1]["role"] != "assistant":
                 placeholder.markdown(full_response)
             placeholder.markdown(full_response)
     message = {"role": "assistant", "content": full_response}
+    # print("asdfghgfdsa",message)
     st.session_state.messages.append(message)
