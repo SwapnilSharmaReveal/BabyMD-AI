@@ -1,6 +1,9 @@
 import streamlit as st
 import replicate
 import os
+from langchain.chains import LLMChain
+from langchain.llms import Replicate
+from langchain.prompts import PromptTemplate
 
 # App title
 st.set_page_config(page_title="BabyMD AI Assistant", initial_sidebar_state="collapsed")
@@ -21,6 +24,7 @@ st.markdown(
 
 # Replicate Credentials
 st.title('👨🏼‍⚕️ BabyMD AI Assistant')
+os.environ['REPLICATE_API_TOKEN'] = 'r8_VzJ8usZwm2ZyWVw1K2RktSMVnaY2dQE2uXXzw'
 replicate_api = os.environ['REPLICATE_API_TOKEN']
 # with st.sidebar:
 
@@ -81,6 +85,22 @@ def clear_chat_history():
     st.session_state.messages = [{"role": "assistant", "content": "Hi! I'm your health assistant. How can I help you today?"}]
 st.sidebar.button('Clear Chat History', on_click=clear_chat_history)
 
+def generate_llama2_summary(text):
+    output = replicate.run('a16z-infra/llama13b-v2-chat:df7690f1994d94e96ad9d568eac121aecf50684a0b0963b25a41cc40061269e5', 
+                            input={"prompt": f"""
+                                    Your task is to Summarize the review below in the following factors, each on a separate line:
+                                        - Problems
+                                        - Age
+                                        - Symptoms
+                                        - Any medication taken yet,
+                                        - Medical history
+                                    delimited by triple 
+                                    backticks, in atmost 30 words
+                                    Review: ```{text}```
+                                    """,
+                                    "temperature":temperature, "top_p":top_p, "max_length":max_length, "repetition_penalty":1})
+    return output
+
 # Function for generating LLaMA2 response. Refactored from https://github.com/a16z-infra/llama2-chatbot
 def generate_llama2_response(prompt_input):
     string_dialogue = "<s>\
@@ -90,9 +110,9 @@ def generate_llama2_response(prompt_input):
         [INT]Do not predict any potential cause for the health problems[/INT]\
         [INT]Your only job is to collect all the related symptoms from the patient according the the health problem they are facing[/INT]\
         [INT]Do not answer any questions other than responding to patients health problems and collecting symptoms[/INT]\
-        [INT]To collect symptoms ask the patient about symptoms like - 1. Body temperature 2. Allergies 3. what food they had?  4. Are there is existing medical conditions 5. Are they taking any medicines[/INT]\
+        [INT]To collect symptoms ask the patient about symptoms like - 1. Body temperature 2. Any Allergies? 3. Their Age? 4. what food they had?  5. Are there is existing medical conditions 5. Are they taking any medicines?[/INT]\
         [INT]Ask about one symptom at a time, Carry the conversation[/INT]\
-        [INT]Collect all the information related to Body Temperature, Any other health problem, Allergies, Are they taking any medications, Is there any past medical history[/INT]\
+        [INT]Collect all the information related to Body Temperature, Any other health problem, their age, Allergies, Are they taking any medications, Is there any past medical history[/INT]\
         [INT]You have to figure out what can be the right symptoms to ask which can help pedtrician for further diagnosis[/INT]\
         [INT]After collecting all the symptoms the final reply should be 'consulting a doctor by booking the appointment' only , Stick to this message and do not add any more information to it.[/INT]\
         [INT]Your final message after collecting all the sympotms should be 'However, it's important to have a pediatrician evaluate your baby to determine the cause of their fever and recommend appropriate treatment.\
@@ -100,15 +120,30 @@ def generate_llama2_response(prompt_input):
         [/INT]\
         [INT]Replace all the diagnosis name with 'some medical conditions'[/INT]\
         [INT]Do not answer any other questions other than collecting symptoms about the health problem[/INT]\
+        [INT] {input} this is the question to which you need to answer by following all the above instructions [INT] \
     "
+    conversations = ''
     for dict_message in st.session_state.messages:
-        if dict_message["role"] == "user":
+        if dict_message["role"] == "user" and dict_message["content"]=="bye":
             string_dialogue += "User: " + dict_message["content"] + "\n\n"
+            conversations += "User: " + dict_message["content"] + "\n\n"
+            response = generate_llama2_summary(string_dialogue)
+            full_response = ''
+            for item in response:
+                full_response += item
+            print("debug2", full_response)    
+        elif dict_message["role"] == "user":
+            string_dialogue += "User: " + dict_message["content"] + "\n\n"
+            conversations += "User: " + dict_message["content"] + "\n\n"
         else:
             string_dialogue += "Assistant: " + dict_message["content"] + "\n\n"
+            conversations += "Assistant: " + dict_message["content"] + "\n\n"
+    prompt_template = PromptTemplate(input_variables=["input"],template=string_dialogue)
+    chain = LLMChain(llm= Replicate(model="a16z-infra/llama13b-v2-chat:df7690f1994d94e96ad9d568eac121aecf50684a0b0963b25a41cc40061269e5"), prompt=prompt_template)
     output = replicate.run('a16z-infra/llama13b-v2-chat:df7690f1994d94e96ad9d568eac121aecf50684a0b0963b25a41cc40061269e5', 
                            input={"prompt": f"{string_dialogue} {prompt_input} Assistant: ",
                                   "temperature":temperature, "top_p":top_p, "max_length":max_length, "repetition_penalty":1})
+    chain.run(prompt_input)
     return output
 
 # User-provided prompt
@@ -130,3 +165,8 @@ if st.session_state.messages[-1]["role"] != "assistant":
             placeholder.markdown(full_response)
     message = {"role": "assistant", "content": full_response}
     st.session_state.messages.append(message)
+
+
+
+
+           
