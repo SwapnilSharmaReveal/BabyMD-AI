@@ -4,12 +4,19 @@ import os
 from langchain.chains import LLMChain
 from langchain.llms import Replicate
 from langchain.prompts import PromptTemplate
-from langfuse.callback import CallbackHandler
+import boto3
+import json
+import io
+from LineIterator import LineIterator
 from dotenv import load_dotenv
 
 load_dotenv()
 
-handler = CallbackHandler(os.getenv('ENV_PUBLIC_KEY'), os.getenv('ENV_SECRET_KEY'), os.getenv('ENV_HOST'))
+boto3_session=boto3.session.Session(region_name="us-east-1")
+smr = boto3.client('sagemaker-runtime')
+endpoint_name = os.getenv("endpoint_name", default=None)
+stop_token = '<|endoftext|>'
+
 
 # App title
 st.set_page_config(page_title="BabyMD AI Assistant", initial_sidebar_state="collapsed")
@@ -104,27 +111,15 @@ def generate_llama2_summary(text):
                                     Review: ```{text}```
                                     """,
                                     "temperature":temperature, "top_p":top_p, "max_length":max_length, "repetition_penalty":1})
+    
     return output
 
 
 # Function for generating LLaMA2 response. Refactored from https://github.com/a16z-infra/llama2-chatbot
 def generate_llama2_response(prompt_input):
     string_dialogue = "<s>\
-        [SYS]You are a assistant to BBMD pedtrician who needs to collect symptoms of the user and who doesnt provide any diagnosis or disease name. You do not respond as 'User' or pretend to be 'User'. You only respond once as 'Assistant'.[/SYS]\
-        [INT]Remember you are a symptoms collector[/INT]\
-        [INT]Do not provide any diagnosis or disease name at the end of the conversation[/INT]\
-        [INT]Do not predict any potential cause for the health problems[/INT]\
-        [INT]Your only job is to collect all the related symptoms from the patient according the the health problem they are facing and basic info about patient like Age and gender[/INT]\
-        [INT]Do not answer any questions other than responding to patients health problems and collecting symptoms[/INT]\
-        [INT]To collect symptoms ask the patient about symptoms like - 1. Body temperature 2.Duration 2. Allergies 3. what food they had?  4. Are there is existing medical conditions 5. Are they taking any medicines [/INT]\
-        [INT]ask questions about 1.Age 2.Gender 3.Birth History[/INT]\
-        [INT]Ask about one symptom at a time, Carry the conversation[/INT]\
-        [INT]Collect all the information related to Body Temperature, Any other health problem, Allergies, Are they taking any medications, Is there any past medical history[/INT]\
-        [INT]You have to figure out what can be the right symptoms to ask which can help pedtrician for further diagnosis[/INT]\
-        [INT]Your final message after collecting all the sympotms should be 'Thanking them to tell you the symptoms, and a pediatrician will be here in 10 mins for live chat'\
-        [/INT]\
-        [INT]Replace all the diagnosis name with 'some medical conditions'[/INT]\
-        [INT]Do not answer any other questions other than collecting symptoms about the health problem {input}[/INT]\
+        As an [SYS], your role is to conduct a conversation with concern and in a professional manner while collecting information about a child's symptoms and basic information from their parents. Your objective is to gather the necessary information within 9 questions while avoiding any potential diagnosis or cause. Please handle any sensitive information shared by the parents with caution and ensure encryption for privacy and security. Inquire about the specific symptoms the child is experiencing and mandatorily collect the following information within two or three lines each: 1. Age and gender of the child, 2. Basic health information, 3. Chief complaint and duration, 4. Allergies, 5. Feeding history, 6. Existing medical conditions, 7. Medications being taken, 8. Birth history, 9. Recent social activities. Once you have gathered all the necessary information, conclude with the message, 'Thank you for sharing the details. Our pediatrician will respond within the next 10 minutes. Remember not to answer any questions that are unrelated to the medical context.\
+        [INT]You need to reply for the users {input}[/INT]\
             "
     conversations = ''
     for dict_message in st.session_state.messages:
@@ -135,7 +130,6 @@ def generate_llama2_response(prompt_input):
             full_response = ''
             for item in response:
                 full_response += item
-            print("debug2", full_response)    
         elif dict_message["role"] == "user":
             string_dialogue += "User: " + dict_message["content"] + "\n\n"
             conversations += "User: " + dict_message["content"] + "\n\n"
@@ -144,11 +138,12 @@ def generate_llama2_response(prompt_input):
             conversations += "Assistant: " + dict_message["content"] + "\n\n"
     prompt_template = PromptTemplate(input_variables=["input"],template=string_dialogue)
     chain = LLMChain(llm= Replicate(model="a16z-infra/llama13b-v2-chat:df7690f1994d94e96ad9d568eac121aecf50684a0b0963b25a41cc40061269e5"), prompt=prompt_template)
-    output = replicate.run('a16z-infra/llama13b-v2-chat:df7690f1994d94e96ad9d568eac121aecf50684a0b0963b25a41cc40061269e5', 
-                           input={"prompt": f"{string_dialogue} {prompt_input} Assistant: ",
-                                  "temperature":temperature, "top_p":top_p, "max_length":max_length, "repetition_penalty":1},callbacks=[handler])
-    chain.run(prompt_input)
-    return output
+    # chain.run(prompt_input)
+
+    body = {"inputs": f"{string_dialogue}s Assistant: ", "parameters": {"max_new_tokens":400, "return_full_text": False}, "stream": True}
+    resp = smr.invoke_endpoint_with_response_stream(EndpointName=endpoint_name, Body=json.dumps(body), ContentType="application/json")
+    event_stream = resp['Body']
+    return event_stream
 
 # User-provided prompt
 if prompt := st.chat_input(disabled=not replicate_api):
@@ -160,12 +155,16 @@ if prompt := st.chat_input(disabled=not replicate_api):
 if st.session_state.messages[-1]["role"] != "assistant":
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            response = generate_llama2_response(prompt)
+            event_stream = generate_llama2_response(prompt)
             placeholder = st.empty()
             full_response = ''
-            for item in response:
-                full_response += item
-                placeholder.markdown(full_response)
+            for line in LineIterator(event_stream):
+                if line != b'':
+                    data = json.loads(line[5:].decode('utf-8'))['token']['text']
+                    if data != stop_token:
+                        full_response += data
+                        placeholder.markdown(full_response)
+
             placeholder.markdown(full_response)
     message = {"role": "assistant", "content": full_response}
     st.session_state.messages.append(message)
