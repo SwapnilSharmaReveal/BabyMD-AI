@@ -21,7 +21,6 @@ st.markdown(
 
 # Replicate Credentials
 st.title('👨🏼‍⚕️ BabyMD AI Assistant')
-os.environ['REPLICATE_API_TOKEN'] = 'r8_VzJ8usZwm2ZyWVw1K2RktSMVnaY2dQE2uXXzw'
 replicate_api = os.environ['REPLICATE_API_TOKEN']
 # with st.sidebar:
 
