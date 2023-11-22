@@ -8,6 +8,7 @@ import boto3
 import json
 import io
 from LineIterator import LineIterator
+from TokenIterator import TokenIterator
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -86,7 +87,7 @@ st.markdown(show_print_btn_css, unsafe_allow_html=True)
 
 # Store LLM generated responses
 if "messages" not in st.session_state.keys():
-    st.session_state.messages = [{"role": "assistant", "content": "Hi! I'm your health assistant. How can I help you today?"}]
+    st.session_state.messages = [{"role": "user", "content": "Hi!"}, {"role": "assistant", "content": "Hi! I'm your health assistant. How can I help you today?"}]
 
 # Display or clear chat messages
 for message in st.session_state.messages:
@@ -94,7 +95,7 @@ for message in st.session_state.messages:
         st.write(message["content"])
 
 def clear_chat_history():
-    st.session_state.messages = [{"role": "assistant", "content": "Hi! I'm your health assistant. How can I help you today?"}]
+    st.session_state.messages = [{"role": "user", "content": "Hi!"}, {"role": "assistant", "content": "Hi! I'm your health assistant. How can I help you today?"}]
 st.sidebar.button('Clear Chat History', on_click=clear_chat_history)
 
 def generate_llama2_summary(text):
@@ -118,8 +119,7 @@ def generate_llama2_summary(text):
 # Function for generating LLaMA2 response. Refactored from https://github.com/a16z-infra/llama2-chatbot
 def generate_llama2_response(prompt_input):
     string_dialogue = "<s>\
-        As an [SYS], your role is to conduct a conversation with concern and in a professional manner while collecting information about a child's symptoms and basic information from their parents. Your objective is to gather the necessary information within 9 questions while avoiding any potential diagnosis or cause. Please handle any sensitive information shared by the parents with caution and ensure encryption for privacy and security. Inquire about the specific symptoms the child is experiencing and mandatorily collect the following information within two or three lines each: 1. Age and gender of the child, 2. Basic health information, 3. Chief complaint and duration, 4. Allergies, 5. Feeding history, 6. Existing medical conditions, 7. Medications being taken, 8. Birth history, 9. Recent social activities. Once you have gathered all the necessary information, conclude with the message, 'Thank you for sharing the details. Our pediatrician will respond within the next 10 minutes. Remember not to answer any questions that are unrelated to the medical context.\
-        [INT]You need to reply for the users {input}[/INT]\
+        Act as a doctor\
             "
     conversations = ''
     for dict_message in st.session_state.messages:
@@ -136,12 +136,33 @@ def generate_llama2_response(prompt_input):
         else:
             string_dialogue += "Assistant: " + dict_message["content"] + "\n\n"
             conversations += "Assistant: " + dict_message["content"] + "\n\n"
-    prompt_template = PromptTemplate(input_variables=["input"],template=string_dialogue)
+    prompt_template = PromptTemplate(template=string_dialogue, input_variables=[])
     chain = LLMChain(llm= Replicate(model="a16z-infra/llama13b-v2-chat:df7690f1994d94e96ad9d568eac121aecf50684a0b0963b25a41cc40061269e5"), prompt=prompt_template)
     # chain.run(prompt_input)
 
-    body = {"inputs": f"{string_dialogue}s Assistant: ", "parameters": {"max_new_tokens":400, "return_full_text": False}, "stream": True}
-    resp = smr.invoke_endpoint_with_response_stream(EndpointName=endpoint_name, Body=json.dumps(body), ContentType="application/json")
+    # body = {"inputs": f"{string_dialogue}s Assistant: ", "parameters": {"max_new_tokens":400, "return_full_text": False}, "stream": True}
+
+    body = {
+        "body": {
+            "inputs": [
+            [
+                {
+                "role": "system",
+                "content": f"{string_dialogue} "
+                },
+                *st.session_state.messages
+            ]
+            ],
+            "parameters": {
+            "max_new_tokens": 256,
+            "top_p": 0.9,
+            "temperature": 0.6
+            }
+        }
+    }
+    print(body)
+    
+    resp = smr.invoke_endpoint_with_response_stream(EndpointName=endpoint_name, Body=json.dumps(body['body']), ContentType="application/json", CustomAttributes='accept_eula=true')
     event_stream = resp['Body']
     return event_stream
 
@@ -159,11 +180,19 @@ if st.session_state.messages[-1]["role"] != "assistant":
             placeholder = st.empty()
             full_response = ''
             for line in LineIterator(event_stream):
+                print(line)
                 if line != b'':
-                    data = json.loads(line[5:].decode('utf-8'))['token']['text']
-                    if data != stop_token:
-                        full_response += data
-                        placeholder.markdown(full_response)
+                    # if line[5:].decode('utf-8') is not '' and line[5:].decode('utf-8') is not None:
+                    # print(line[5:].decode('utf-8'))
+                    full_response += line[4:].decode('utf-8')
+                    print("Full response: ", full_response)
+                    # print("Full response: ", json.loads(full_response))
+                    # data = json.loads(line[5:].decode('utf-8'))['token']['text']
+                    # if data != stop_token:
+                    #     full_response += data
+                    placeholder.markdown(full_response)
+
+            print("Full response: ", full_response)
 
             placeholder.markdown(full_response)
     message = {"role": "assistant", "content": full_response}
