@@ -10,6 +10,7 @@ import io
 from LineIterator import LineIterator
 from TokenIterator import TokenIterator
 from dotenv import load_dotenv
+import ast
 
 load_dotenv()
 
@@ -119,7 +120,7 @@ def generate_llama2_summary(text):
 # Function for generating LLaMA2 response. Refactored from https://github.com/a16z-infra/llama2-chatbot
 def generate_llama2_response(prompt_input):
     string_dialogue = "<s>\
-        Act as a doctor\
+        You are an assistant to BBMD paediatrician who needs to collect symptoms of the child from its parent in an empathetic way and who doesn't provide any diagnosis or disease name.The child is the one having symptoms, not the parent.At no point, will you provide any diagnosis, potential diagnosis or treatment, care plan. The goal of this conversation is to collect 1. Chief complaint with its duration and severity 2. Basic health information like age, name, gender, medical history, birth history, feeding history, social & environment history 3. Related symptoms to the chief complaint. Do not ask questions if some required information can be inferred from their previous input. Ask questions one by one within 200 characters maximum. Once you have gathered all the necessary information, conclude with the message, 'Thank you for sharing the details. Our paediatrician will respond within the next 10 minutes’. Do not provide any diagnosis or talk about the disease the child might be having. Remember to not answer any questions that are unrelated to the context of this conversation. After finishing the conversation, summarize the conversation and create a symptom summary from the conversation and send it as part of the last message itself. The summary should highlight the key points just like how a paediatrician would do. After finishing the conversation, breakdown the collected information into categories of chief complaint, duration, severity, basic health information and related symptoms point by point in new lines.\
             "
     conversations = ''
     for dict_message in st.session_state.messages:
@@ -136,8 +137,8 @@ def generate_llama2_response(prompt_input):
         else:
             string_dialogue += "Assistant: " + dict_message["content"] + "\n\n"
             conversations += "Assistant: " + dict_message["content"] + "\n\n"
-    prompt_template = PromptTemplate(template=string_dialogue, input_variables=[])
-    chain = LLMChain(llm= Replicate(model="a16z-infra/llama13b-v2-chat:df7690f1994d94e96ad9d568eac121aecf50684a0b0963b25a41cc40061269e5"), prompt=prompt_template)
+    # prompt_template = PromptTemplate(template=string_dialogue, input_variables=[])
+    # chain = LLMChain(llm= Replicate(model="a16z-infra/llama13b-v2-chat:df7690f1994d94e96ad9d568eac121aecf50684a0b0963b25a41cc40061269e5"), prompt=prompt_template)
     # chain.run(prompt_input)
 
     # body = {"inputs": f"{string_dialogue}s Assistant: ", "parameters": {"max_new_tokens":400, "return_full_text": False}, "stream": True}
@@ -154,9 +155,9 @@ def generate_llama2_response(prompt_input):
             ]
             ],
             "parameters": {
-            "max_new_tokens": 256,
-            "top_p": 0.9,
-            "temperature": 0.6
+            "max_new_tokens": 128,
+            "top_p": 0.1,
+            "temperature": 0.1
             }
         }
     }
@@ -180,20 +181,15 @@ if st.session_state.messages[-1]["role"] != "assistant":
             placeholder = st.empty()
             full_response = ''
             for line in LineIterator(event_stream):
-                print(line)
-                if line != b'':
-                    # if line[5:].decode('utf-8') is not '' and line[5:].decode('utf-8') is not None:
-                    # print(line[5:].decode('utf-8'))
-                    full_response += line[4:].decode('utf-8')
-                    print("Full response: ", full_response)
-                    # print("Full response: ", json.loads(full_response))
-                    # data = json.loads(line[5:].decode('utf-8'))['token']['text']
-                    # if data != stop_token:
-                    #     full_response += data
-                    placeholder.markdown(full_response)
-
-            print("Full response: ", full_response)
-
-            placeholder.markdown(full_response)
-    message = {"role": "assistant", "content": full_response}
+                full_response += line[2:].decode('utf-8')
+                # output_text = full_response.replace('"generation":', '')
+                # final_json = json.loads(output_text)
+                # full_response = full_response[12:-1]
+                if line == b'  }':
+                    break
+            json_data = json.loads(full_response)
+            generation_value = json_data.get('generation', {})
+            final_response = generation_value["content"]
+            placeholder.markdown(final_response)
+    message = {"role": "assistant", "content": final_response}
     st.session_state.messages.append(message)
