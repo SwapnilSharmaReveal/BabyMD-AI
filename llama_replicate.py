@@ -17,7 +17,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 # Replicate Credentials
-st.title(':male-doctor::skin-tone-3: BabyMD AI Assistant')
+st.title('👨🏼‍⚕️ BabyMD AI Assistant'')
 replicate_api = os.environ['REPLICATE_API_TOKEN']
 # with st.sidebar:
 #     # st.subheader('Models and parameters')
