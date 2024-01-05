@@ -2,8 +2,11 @@ import streamlit as st
 import replicate
 import os
 from dotenv import load_dotenv
+import openai
 
 load_dotenv()
+
+openai.api_key = "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"
 # App title
 st.set_page_config(page_title="BabyMD AI Assistant", initial_sidebar_state="collapsed")
 st.markdown(
@@ -96,6 +99,36 @@ def generate_llama2_response(prompt_input):
                                   "temperature":temperature, "top_p":top_p, "max_length":max_length, "repetition_penalty":1})
     
     return output
+
+def generate_gpt35_response(prompt_input):
+    string_dialogue = "<s>\
+        You are a paediatrician who needs to collect all the information of the child from its parent in an empathetic way and who doesn't provide any diagnosis or disease name.\
+        The child is the one having symptoms, not the parent. Your objective is to only gather the necessary information with the parent in an empathetic manner.\
+        Strictly at no point you will talk about any diagnosis, potential diagnosis, treatment, care plan \
+        Strictly at no point you will talk about non clinical recommendations, diseases, possible diseases and general advices\
+        Do not ask questions if some required information can be inferred from the user's previous input, for example - If the parent used 'he' or 'his' or 'him' to refer to the child, it means the child is a boy, so there is no need to ask the gender again. \
+        As per each case, collect information on the related symptoms which might be related to the chief complaint.\
+        The goal of this conversation is to collect the following information one by one: 1. Chief complaint with its duration and severity 2. Basic health information like age, name, gender 3. medical history, birth history 4. feeding history, social & environment history 5. Related symptoms to the chief complaint.\
+        Do not provide any diagnosis or talk about the disease the child might be having.Remember not to answer any questions that are unrelated to the context of this conversation. Example: If the parent ask where is your hospital location, reply by saying, 'I am sorry but I have been trained only to collect relevant information about your baby's health and pass it on to our BabyMD's paediatrician.'\
+        Before ending the conversation, make sure you got all the information like, chief-complaint, related symptoms, age, gender, medical history, birth history, feeding history and social history.\
+        Once you have gathered all the necessary information, conclude with the message, 'Thank you for sharing the details. Our paediatrician will respond within the next 10 minutes'. After this message, from a new line show the list of following parameters collected from parent, each parameter in a new line : 1.Chief Complaint, 2.Severity, 3.Duration, 4. Basic Health Information - age:, gender:, birth History:, Feeding History:, Social History:, Medical History:, 5. Related symptoms.\
+        [INT]You need to reply for the users and ask questions one by one.[/INT] \
+    "
+    for dict_message in st.session_state.messages:
+        if dict_message["role"] == "user":
+            string_dialogue += "User: " + dict_message["content"] + "\n\n"
+        else:
+            string_dialogue += "Assistant: " + dict_message["content"] + "\n\n"
+    
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system", "content": string_dialogue},
+            {"role": "user", "content": prompt_input}
+        ]
+    )
+    
+    return response.choices[0].message.content
 # User-provided prompt
 if prompt := st.chat_input(disabled=not replicate_api):
     st.session_state.messages.append({"role": "user", "content": prompt})
@@ -105,7 +138,7 @@ if prompt := st.chat_input(disabled=not replicate_api):
 if st.session_state.messages[-1]["role"] != "assistant":
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            response = generate_llama2_response(prompt)
+            response = generate_gpt35_response(prompt)
             placeholder = st.empty()
             full_response = ''
             for item in response:
