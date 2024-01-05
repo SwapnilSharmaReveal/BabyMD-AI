@@ -130,7 +130,7 @@ def generate_gpt35_response(prompt_input):
     
     return response.choices[0].message.content
 # User-provided prompt
-if prompt := st.chat_input(disabled=not replicate_api):
+if prompt := st.chat_input():
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.write(prompt)
