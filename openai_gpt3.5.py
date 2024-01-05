@@ -4,7 +4,7 @@ import os
 import openai
 
 
-openai.api_key = os.getenv('OPENAI_API_KEY')
+openai.api_key = "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"
 # App title
 st.set_page_config(page_title="BabyMD AI Assistant", initial_sidebar_state="collapsed")
 st.markdown(
