@@ -1,8 +1,10 @@
 import streamlit as st
 import replicate
 import os
+from dotenv import load_dotenv
 import openai
 
+load_dotenv()
 
 openai.api_key = "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"
 # App title
