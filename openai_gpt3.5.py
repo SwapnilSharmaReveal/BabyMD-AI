@@ -24,7 +24,7 @@ st.markdown(
 )
 # Replicate Credentials
 st.title('👨🏼‍⚕️ BabyMD AI Assistant')
-replicate_api = os.getenv('REPLICATE_API_TOKEN')
+# replicate_api = os.getenv('REPLICATE_API_TOKEN')
 # with st.sidebar:
 #     # st.subheader('Models and parameters')
 #     # selected_model = st.sidebar.selectbox('Choose a Llama2 model', ['Llama2-7B', 'Llama2-13B'], key='selected_model')
