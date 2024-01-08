@@ -8,7 +8,7 @@ import requests
 
 load_dotenv()
 
-openai.api_key = "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"
+openai.api_key = "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"
 # App title
 st.set_page_config(page_title="BabyMD AI Assistant", initial_sidebar_state="collapsed")
 st.markdown(
