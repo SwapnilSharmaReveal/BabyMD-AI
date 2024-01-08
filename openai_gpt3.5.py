@@ -3,6 +3,8 @@ import replicate
 import os
 from dotenv import load_dotenv
 import openai
+import requests
+
 
 load_dotenv()
 
@@ -23,7 +25,8 @@ st.markdown(
     unsafe_allow_html=True,
 )
 # Replicate Credentials
-st.title('👨🏼‍⚕️ BabyMD AI Assistant')
+st.title('Agatsya.MD')
+st.subheader("Your personal health expert")
 # replicate_api = os.getenv('REPLICATE_API_TOKEN')
 # with st.sidebar:
 #     # st.subheader('Models and parameters')
@@ -66,13 +69,13 @@ show_print_btn_css = """
 st.markdown(show_print_btn_css, unsafe_allow_html=True)
 # Store LLM generated responses
 if "messages" not in st.session_state.keys():
-    st.session_state.messages = [{"role": "assistant", "content": "Hey! Welcome to BabyMD - a revolutionary Indian Pediatric Care Chain offering best-in-class, round the clock clinical care. I am X, your personal assistant to help you get instant consultation with our expert pediatricians. What can I help you today?"}]
+    st.session_state.messages = [{"role": "assistant", "content": "Hey! Welcome to Agatsya.MD. How can I help you today?"}]
 # Display or clear chat messages
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.write(message["content"])
 def clear_chat_history():
-    st.session_state.messages = [{"role": "assistant", "content": "Hey! Welcome to BabyMD - a revolutionary Indian Pediatric Care Chain offering best-in-class, round the clock clinical care. I am X, your personal assistant to help you get instant consultation with our expert pediatricians. What can I help you today?"}]
+    st.session_state.messages = [{"role": "assistant", "content": "Hey! Welcome to Agatsya.MD. How can I help you today?"}]
 st.sidebar.button('Clear Chat History', on_click=clear_chat_history)
 # Function for generating LLaMA2 response. Refactored from https://github.com/a16z-infra/llama2-chatbot
 def generate_llama2_response(prompt_input):
@@ -118,6 +121,21 @@ def generate_gpt35_response(prompt_input):
     )
     
     return response.choices[0].message.content
+
+def query_meditron_70b(prompt):
+    API_URL = "https://api-inference.huggingface.co/models/microsoft/phi-2"
+    headers = {"Authorization": "Bearer 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"}
+
+    response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
+    print(response.json())
+    
+    if response.status_code == 200:
+        print(response.json())
+        return response.json()
+    else:
+        print(response)
+        return {"error": response.text}
+    
 # User-provided prompt
 if prompt := st.chat_input():
     st.session_state.messages.append({"role": "user", "content": prompt})
