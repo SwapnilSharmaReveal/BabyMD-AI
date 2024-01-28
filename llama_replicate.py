@@ -20,7 +20,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 # Replicate Credentials
-st.title('👨🏼‍⚕️ BabyMD AI Assistant')
+st.title('👨🏼‍⚕️ Medical AI Assistant')
 replicate_api = os.getenv('REPLICATE_API_TOKEN')
 # with st.sidebar:
 #     # st.subheader('Models and parameters')
